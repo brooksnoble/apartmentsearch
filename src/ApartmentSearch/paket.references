@@ -6,5 +6,4 @@ Http.fs
 MongoDB.Bson
 MongoDB.Driver
 MongoDB.Driver.Core
-MongoDB.FSharp
 Suave
