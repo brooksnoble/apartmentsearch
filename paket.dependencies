@@ -1,0 +1,11 @@
+source https://www.nuget.org/api/v2/
+
+nuget FSharp.Core 3.1.2.1 framework: >= net45
+nuget FSharp.Data 2.2.5 framework: >= net45
+nuget FsPickler 1.2.5 framework: >= net45
+nuget HtmlAgilityPack 1.4.9 framework: >= net45
+nuget Http.fs 1.5.1 framework: >= net45
+nuget MongoDB.Bson 2.0.1 framework: >= net45
+nuget MongoDB.Driver 2.0.1 framework: >= net45
+nuget MongoDB.Driver.Core 2.0.1 framework: >= net45
+nuget Suave 0.30.0 framework: >= net45

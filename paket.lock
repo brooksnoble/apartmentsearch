@@ -1,0 +1,17 @@
+NUGET
+  remote: https://www.nuget.org/api/v2
+  specs:
+    FSharp.Core (3.1.2.1) - framework: >= net45
+    FSharp.Data (2.2.5) - framework: >= net45
+    FsPickler (1.2.5) - framework: >= net45
+    HtmlAgilityPack (1.4.9) - framework: >= net45
+    Http.fs (1.5.1) - framework: >= net45
+    MongoDB.Bson (2.0.1) - framework: >= net45
+    MongoDB.Driver (2.0.1) - framework: >= net45
+      MongoDB.Bson (>= 2.0.1)
+      MongoDB.Driver.Core (>= 2.0.1)
+    MongoDB.Driver.Core (2.0.1) - framework: >= net45
+      MongoDB.Bson (>= 2.0.1)
+    Suave (0.30.0) - framework: >= net45
+      FSharp.Core (>= 3.1.2.1)
+      FsPickler (>= 1.2.5)

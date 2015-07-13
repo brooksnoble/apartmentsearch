@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+<assembly><name>FSharp.MongoDB.Bson</name></assembly>
+<members>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.FSharpValueSerializationProvider">
+<summary>
+ Provides (de)serialization of F# data types.
+ Includes options, lists, maps, sets, records, and discriminated unions.
+</summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Conventions.DiscriminatedUnionConvention">
+ <summary>
+ Convention for a discriminated union that maps the constructor and fields.
+ Handles when the overall union type contains non-null union cases,
+ or is a singleton union case.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Conventions.OptionTypeConvention">
+ <summary>
+ Convention for option types that writes the value in the <c>Some</c> case
+ and omits the field in the <c>None</c> case.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Conventions.RecordTypeConvention">
+ <summary>
+ Convention for a record type that maps the constructor and fields.
+ </summary>
+</member>
+<member name="M:FSharp.MongoDB.Bson.Serialization.ConventionsModule.Register">
+<summary>
+ Registers the conventions for F# data types.
+</summary>
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.ConventionsModule">
+<summary>
+ Entry point to initialize the F# data type conventions.
+</summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Serializers.DiscriminatedUnionSerializer`1">
+ <summary>
+ A serializer for discriminated unions.
+ Handles null union cases.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Serializers.FSharpListSerializer`1">
+ <summary>
+ A serializer for F# lists.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Serializers.FSharpMapSerializer`2">
+ <summary>
+ A serializer for F# maps.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Serializers.FSharpSetSerializer`1">
+ <summary>
+ A serializer for F# sets.
+ </summary>
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.Serializers.OptionTypeSerializer`1">
+ <summary>
+ A serializer for option types.
+ Writes the value for the <c>Some</c> case, and <c>null</c> for the None case.
+ </summary>
+</member>
+<member name="M:FSharp.MongoDB.Bson.Serialization.SerializersModule.Register">
+ <summary>Registers the <see cref="FSharpValueSerializationProvider" />.</summary>
+</member>
+<member name="">
+
+</member>
+<member name="T:FSharp.MongoDB.Bson.Serialization.SerializersModule">
+ <summary>
+ Entry point to initialize the <see cref="FSharpValueSerializationProvider" />.
+ </summary>
+</member>
+</members>
+</doc>
