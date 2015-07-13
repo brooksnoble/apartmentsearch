@@ -103,6 +103,6 @@ let app =
 [<EntryPoint>]
 let main argv =
     startWebServer
-        { defaultConfig with bindings = [ HttpBinding.mk HTTP (IPAddress.Parse "0.0.0.0") 999us ] }
+        { defaultConfig with bindings = [ HttpBinding.mk HTTP (IPAddress.Parse "0.0.0.0") 8083us ] }
         app
     0

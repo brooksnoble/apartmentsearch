@@ -1,0 +1,23 @@
+machine:
+#  services:
+#    - docker
+  pre:
+    - |
+      sudo curl -L -o /usr/bin/docker 'http://s3-external-1.amazonaws.com/circle-downloads/docker-1.6.2-circleci'
+      sudo chmod 0755 /usr/bin/docker
+      sudo start docker
+
+dependencies:
+  override:
+    - docker info
+    - ./build.sh
+
+test:
+  override:
+    - "true"
+
+deployment:
+  hub:
+    branch: master
+    commands:
+      - ./push_images.sh
