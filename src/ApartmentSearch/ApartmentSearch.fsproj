@@ -8,7 +8,7 @@
     <ProjectGuid>e16aa2fb-1410-49a4-8b00-9c391f602576</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>ApartmentScraper</RootNamespace>
-    <AssemblyName>ApartmentScraper</AssemblyName>
+    <AssemblyName>ApartmentSearch</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFSharpCoreVersion>4.3.1.0</TargetFSharpCoreVersion>
