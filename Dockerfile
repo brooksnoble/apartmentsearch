@@ -10,6 +10,6 @@ RUN mono ./tools/paket.bootstrapper.exe && mono ./tools/paket.exe install && \
 
 EXPOSE 8083
 
-ENV StaticFilePath /app/src/Web.Server/static/
+ENV StaticFilePath /app/src/ApartmentSearch/static/
 
 ENTRYPOINT ["/usr/bin/env", "mono", "/app/src/ApartmentSearch/bin/Release/ApartmentSearch.exe"]
