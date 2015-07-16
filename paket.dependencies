@@ -9,3 +9,4 @@ nuget MongoDB.Bson 2.0.1 framework: >= net45
 nuget MongoDB.Driver 2.0.1 framework: >= net45
 nuget MongoDB.Driver.Core 2.0.1 framework: >= net45
 nuget Suave 0.30.0 framework: >= net45
+nuget FSharpx.Async 1.12.0 framework: >= net45

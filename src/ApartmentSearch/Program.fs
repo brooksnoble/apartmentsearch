@@ -14,6 +14,7 @@ open Suave.Types
 open System.Net
 open Scraping
 open Util
+open FSharp.Control
 
 let cacheInMongo client collection (f: Async<'a list>) =
     async {
@@ -38,48 +39,112 @@ module Suave =
           return! OK (view results) x
         }
 
+    let handleSync f view: WebPart =
+      fun (x : HttpContext) ->
+        async {
+          let results = f ()
+          return! OK (view results) x
+        }
+
+    let startUp handler: WebPart =
+        fun (x: HttpContext) ->
+            async {
+                handler () |> Async.Start
+                return Some x
+            }
+
 module Handlers =
-    let rescrape client =
-        doScrape "durham-nc" [1..9] 
-        |> cacheInMongo client "apartmentScrapes"
+    let getOverallResult statusRef = 
+        match !statusRef with
+        | None ->
+            failwith "Listing run needs to be run first"
+        | Some x -> 
+            match x.OverallResult with
+            | None -> 
+                failwith "Listing run needs to be finished first"
+            | Some x -> x
 
-    let getErrors client =
-        async {
-            let! results = 
-                Mongo.find<ApartmentScrape> client "apartmentScrapes" <@ fun x -> true @>
-        
-            return
-                results
-                |> List.map snd
-                |> List.choose (fun x -> match x.Result with | Success _ -> None | Failure ex -> Some (x.Url, ex))
-        }
+    module Listings = 
+        let status = ref None
 
-    let getSortedByApartment client =
-        async {
-            let! results = 
-                Mongo.find<ApartmentScrape> client "apartmentScrapes" <@ fun x -> true @>
+        let start () =
+            let runSeq = doListingRun "cary-nc" ([1..10] |> List.map string)
 
-            return 
-                results
-                |> List.map snd
-                |> List.choose (fun x -> match x.Result with | Success x -> Some x | Failure _ -> None)
-                |> List.sortBy (fun ai -> ai.YearBuilt)
-                |> List.map (fun ai -> ai.YearBuilt, ai.Name, ai.Address)
-        }
+            runSeq
+            |> AsyncSeq.iter (fun runState -> status := Some runState)
+
+        let getStatus () =
+            match !status with
+            | Some runStatus -> runStatus
+            | None -> failwith "unexpected"
+
+        let getSortedResults () =
+            getOverallResult status
+            |> List.sort
+
+    module Records = 
+        let status = ref None
+
+        let start () =
+            let x = getOverallResult Listings.status
+            doRecordRun x                 
+            |> AsyncSeq.iter (fun runState -> status := Some runState)
+
+        let getStatus () =
+            match !status with
+            | Some runStatus -> runStatus
+            | None -> failwith "unexpected"
+
+        let getSortedResults () =
+            getOverallResult status
+            |> List.sortBy (fun ai -> ai.YearBuilt)
+
 
 module Views = 
-    let viewAsTable (headers: string * string * string) (results: (string * string * string) list) =
-        let viewRow (a,b,c) = 
-            sprintf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" a b c
-        let x,y,z = headers
-        let topRow = sprintf "<tr><th>%s</th><th>%s</th><th>%s</th></tr>" x y z
-        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table>" topRow (results |> List.map viewRow |> String.concat "")
+    let viewOption noneHtml someView =
+        fun option -> 
+            match option with 
+            | None -> noneHtml
+            | Some x -> someView x
 
-    let viewAsTable2 (results: (string * exn list) list) =
-        let viewRow (a,b: exn list) = 
-            sprintf "<tr><td>%s</td><td>%A</td></tr>" a b
-        let topRow = "<tr><th>URL</th><th>Exception</th></tr>"
-        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table>" topRow (results |> List.map viewRow |> String.concat "")
+    let viewAsCode x =
+        sprintf "<pre>%A</pre>" x
+
+    let viewRunStatus (viewResult: 'a -> string) (runState: RunState<'a, 'b>) =
+        let viewStatus (status: RunRowStatus<'a>) =
+            match status with
+            | NotStarted -> "<td colspan='2'>Not Started</td>"
+            | Waiting -> "<td colspan='2'>Waiting</td>"
+            | Done result -> 
+                let xx =
+                    match result with
+                    | FetchFail exns ->
+                        sprintf "<div title=\"%s\">Fetch Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
+                    | FetchSuccess (html, parseResult) ->
+                        match parseResult with
+                        | ParseFail exns ->
+                            sprintf "<div title=\"%s\">Parse Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
+                        | ParseSuccess parsed ->
+                            parsed |> viewResult
+                sprintf "<td><div>Done</div></td><td>%s</td>" (xx)
+        
+        let viewRow (row: RunRow<'a>) = 
+            sprintf "<tr><td>%s</td><td>%s</td></tr>" row.Fragment (viewStatus row.Status)
+        
+        let topRow = "<tr><th>Fragment</th><th>Status</th></tr>"
+        
+        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table><h1>Final Results</h1><div>%s</div>" 
+            topRow 
+            (runState.Results |> List.map viewRow |> String.concat "")
+            (runState.OverallResult |> (viewAsCode |> viewOption "None Yet..."))
+    
+    let viewApartmentList (apartments: ApartmentInfo list) =
+        let viewApartment (apt: ApartmentInfo) =
+            sprintf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" (apt.YearBuilt |> viewOption "Unknown" id) apt.Name apt.Address
+        let rows = apartments |> List.map viewApartment |> String.concat ""
+        
+        let header = "<tr><th>Year</th><th>Name</th><th>Address</th></tr>"
+        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table>" header rows
 
 let client = Mongo.conn (env "MongoConnectionString")
 let db = Mongo.getDb "local" client
@@ -90,9 +155,12 @@ let app =
     choose
         [
             GET >>= choose [
-                path "/scrape" >>= Suave.handle (Handlers.rescrape db) (fun () -> "Done!")
-                path "/errors" >>= Suave.handle (Handlers.getErrors db) Views.viewAsTable2
-                path "/results" >>= Suave.handle (Handlers.getSortedByApartment db) (Views.viewAsTable ("Year", "Name", "Address"))
+                path "/listings/start" >>= Suave.startUp Handlers.Listings.start >>= Redirection.found "results"
+                path "/listings/results" >>= Suave.handleSync Handlers.Listings.getStatus (Views.viewRunStatus (sprintf "%A"))
+                path "/listings/sorted" >>= Suave.handleSync Handlers.Listings.getSortedResults (String.concat "<br />\n")
+                path "/records/start" >>= Suave.startUp Handlers.Records.start >>= Redirection.found "results"
+                path "/records/results" >>= Suave.handleSync Handlers.Records.getStatus (Views.viewRunStatus (sprintf "%A"))
+                path "/records/sorted" >>= Suave.handleSync Handlers.Records.getSortedResults Views.viewApartmentList
                 path "/" >>= file (staticFilePath + "index.html")
                 browse staticFilePath
             ]

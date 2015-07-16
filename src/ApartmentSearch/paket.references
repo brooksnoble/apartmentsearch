@@ -7,3 +7,4 @@ MongoDB.Bson
 MongoDB.Driver
 MongoDB.Driver.Core
 Suave
+FSharpx.Async

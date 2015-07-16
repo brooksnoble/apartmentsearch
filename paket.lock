@@ -1,8 +1,11 @@
 NUGET
   remote: https://www.nuget.org/api/v2
   specs:
+    FSharp.Control.AsyncSeq (2.0.1)
     FSharp.Core (3.1.2.1) - framework: >= net45
     FSharp.Data (2.2.5) - framework: >= net45
+    FSharpx.Async (1.12.0) - framework: >= net45
+      FSharp.Control.AsyncSeq
     FsPickler (1.2.5) - framework: >= net45
     HtmlAgilityPack (1.4.9) - framework: >= net45
     Http.fs (1.5.1) - framework: >= net45

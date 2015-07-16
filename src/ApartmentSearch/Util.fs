@@ -11,6 +11,15 @@ module List =
         |> List.map List.rev
         |> List.rev
 
+    let rec replaceAt idx newElem list =
+        match list with
+        | [] -> []
+        | (head::tail) ->
+            match idx with
+            | 0 -> (newElem::tail)
+            | n -> (head::(replaceAt (idx-1) newElem tail))
+
+
 module Expr =
     open Microsoft.FSharp.Quotations
     open Microsoft.FSharp.Linq.RuntimeHelpers.LeafExpressionConverter
