@@ -53,7 +53,9 @@
   <ItemGroup>
     <Compile Include="Util.fs" />
     <Compile Include="Mongo.fs" />
+    <Compile Include="Parsing.fs" />
     <Compile Include="Scraping.fs" />
+    <Compile Include="ApartmentJob.fs" />
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="paket.references" />

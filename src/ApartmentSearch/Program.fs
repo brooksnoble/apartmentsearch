@@ -19,7 +19,7 @@ open FSharp.Control
 let cacheInMongo client collection (f: Async<'a list>) =
     async {
         let! deletedCount = Mongo.delete<'a> client collection <@ fun x -> true @>
-        
+
         let! results = f
 
         do! results
@@ -53,52 +53,26 @@ module Suave =
                 return Some x
             }
 
+    let pause ms: WebPart = 
+        fun (x: HttpContext) ->
+            async {
+                do! Async.Sleep(ms)
+                return Some x
+            }
+
 module Handlers =
-    let getOverallResult statusRef = 
-        match !statusRef with
-        | None ->
-            failwith "Listing run needs to be run first"
-        | Some x -> 
-            match x.OverallResult with
-            | None -> 
-                failwith "Listing run needs to be finished first"
-            | Some x -> x
+    let status = ref None
 
-    module Listings = 
-        let status = ref None
+    let start () =
+        let runSeq = doJob ApartmentJob.jobConfig
 
-        let start () =
-            let runSeq = doListingRun "cary-nc" ([1..10] |> List.map string)
+        runSeq
+        |> AsyncSeq.iter (fun runState -> status := Some runState)
 
-            runSeq
-            |> AsyncSeq.iter (fun runState -> status := Some runState)
-
-        let getStatus () =
-            match !status with
-            | Some runStatus -> runStatus
-            | None -> failwith "unexpected"
-
-        let getSortedResults () =
-            getOverallResult status
-            |> List.sort
-
-    module Records = 
-        let status = ref None
-
-        let start () =
-            let x = getOverallResult Listings.status
-            doRecordRun x                 
-            |> AsyncSeq.iter (fun runState -> status := Some runState)
-
-        let getStatus () =
-            match !status with
-            | Some runStatus -> runStatus
-            | None -> failwith "unexpected"
-
-        let getSortedResults () =
-            getOverallResult status
-            |> List.sortBy (fun ai -> ai.YearBuilt)
-
+    let getStatus () =
+        match !status with
+        | Some runStatus -> runStatus
+        | None -> failwith "unexpected"
 
 module Views = 
     let viewOption noneHtml someView =
@@ -110,41 +84,42 @@ module Views =
     let viewAsCode x =
         sprintf "<pre>%A</pre>" x
 
-    let viewRunStatus (viewResult: 'a -> string) (runState: RunState<'a, 'b>) =
-        let viewStatus (status: RunRowStatus<'a>) =
-            match status with
-            | NotStarted -> "<td colspan='2'>Not Started</td>"
-            | Waiting -> "<td colspan='2'>Waiting</td>"
-            | Done result -> 
-                let xx =
-                    match result with
-                    | FetchFail exns ->
-                        sprintf "<div title=\"%s\">Fetch Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
-                    | FetchSuccess (html, parseResult) ->
-                        match parseResult with
-                        | ParseFail exns ->
-                            sprintf "<div title=\"%s\">Parse Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
-                        | ParseSuccess parsed ->
-                            parsed |> viewResult
-                sprintf "<td><div>Done</div></td><td>%s</td>" (xx)
+    let viewStepStatus (stepStatus: StepState) =
+        let viewRunningStepStatus (viewInput: 'TInput -> string) (viewResult: 'TParseResult -> string) (runState: RunningStepState<'TInput, 'TParseResult, 'TOutput>) =
+            let viewStatus (status: RunRowStatus<'TParseResult>) =
+                match status with
+                | NotStarted -> "<td colspan='2'>Not Started</td>"
+                | Waiting -> "<td colspan='2'>Waiting</td>"
+                | Done result -> 
+                    let xx =
+                        match result with
+                        | FetchFail exns ->
+                            sprintf "<div title=\"%s\">Fetch Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
+                        | FetchSuccess (html, parseResult) ->
+                            match parseResult with
+                            | ParseFail exns ->
+                                sprintf "<div title=\"%s\">Parse Failure</div>" ((sprintf "%A" exns).Replace("\"", "'"))
+                            | ParseSuccess parsed ->
+                                parsed |> viewResult
+                    sprintf "<td><div>Done</div></td><td>%s</td>" (xx)
+
+            let viewRow (row: StepRow<'TInput, 'TParseResult>) = 
+                sprintf "<tr><td>%s</td><td>%s</td></tr>" (viewInput row.Fragment) (viewStatus row.Status)
+
+            let topRow = "<tr><th>Fragment</th><th>Status</th></tr>"
         
-        let viewRow (row: RunRow<'a>) = 
-            sprintf "<tr><td>%s</td><td>%s</td></tr>" row.Fragment (viewStatus row.Status)
-        
-        let topRow = "<tr><th>Fragment</th><th>Status</th></tr>"
-        
-        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table><h1>Final Results</h1><div>%s</div>" 
-            topRow 
-            (runState.Results |> List.map viewRow |> String.concat "")
-            (runState.OverallResult |> (viewAsCode |> viewOption "None Yet..."))
-    
-    let viewApartmentList (apartments: ApartmentInfo list) =
-        let viewApartment (apt: ApartmentInfo) =
-            sprintf "<tr><td>%s</td><td>%s</td><td>%s</td></tr>" (apt.YearBuilt |> viewOption "Unknown" id) apt.Name apt.Address
-        let rows = apartments |> List.map viewApartment |> String.concat ""
-        
-        let header = "<tr><th>Year</th><th>Name</th><th>Address</th></tr>"
-        sprintf "<table><thead>%s</thead><tbody>%s</tbody></table>" header rows
+            sprintf "<table><thead>%s</thead><tbody>%s</tbody></table><h1>Final Results</h1><div>%s</div>" 
+                topRow 
+                (runState.Results |> List.map viewRow |> String.concat "")
+                (runState.OverallResult |> (viewAsCode |> viewOption "None Yet..."))
+
+        match stepStatus with 
+        | WaitingForInput -> "<h2>Waiting for input from previous step...</h2>"
+        | Running state -> viewRunningStepStatus viewAsCode viewAsCode state
+
+    let viewJobStatus (jobState: JobState) = 
+        "<h1>Job State</h1>"
+        + (jobState.Steps |> Array.mapi (fun i step -> "<h2>Step " + (i + 1).ToString() + "</h2><div>" + (viewStepStatus step) + "</div>") |> String.concat "\n")
 
 let client = Mongo.conn (env "MongoConnectionString")
 let db = Mongo.getDb "local" client
@@ -155,12 +130,8 @@ let app =
     choose
         [
             GET >>= choose [
-                path "/listings/start" >>= Suave.startUp Handlers.Listings.start >>= Redirection.found "results"
-                path "/listings/results" >>= Suave.handleSync Handlers.Listings.getStatus (Views.viewRunStatus (sprintf "%A"))
-                path "/listings/sorted" >>= Suave.handleSync Handlers.Listings.getSortedResults (String.concat "<br />\n")
-                path "/records/start" >>= Suave.startUp Handlers.Records.start >>= Redirection.found "results"
-                path "/records/results" >>= Suave.handleSync Handlers.Records.getStatus (Views.viewRunStatus (sprintf "%A"))
-                path "/records/sorted" >>= Suave.handleSync Handlers.Records.getSortedResults Views.viewApartmentList
+                path "/start" >>= Suave.startUp Handlers.start >>= Suave.pause 1000 >>= Redirection.found "results"
+                path "/results" >>= Suave.handleSync Handlers.getStatus Views.viewJobStatus
                 path "/" >>= file (staticFilePath + "index.html")
                 browse staticFilePath
             ]

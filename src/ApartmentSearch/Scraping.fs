@@ -6,103 +6,101 @@ open Util
 open Util.HtmlAgility
 open FSharp.Control
 
-let rec tryPaths paths (node: HtmlNode) =
-    match paths with
-    | (path::rest) ->
-        let results = node.SelectNodes(path)
-        match results with
-        | null -> tryPaths rest node
-        | list -> list |> Seq.toList
-    | [] ->
-        failwith "no paths found"
+[<AutoOpen>]
+module Data = 
+    type Data =
+        | Int of int
+        | String of string
+        | Record of Map<string, Data>
+        | Option of Data option
+        | List of List<Data>
 
-let rec tryPath path (node: HtmlNode) =
-    tryPaths [path] node
+    let asInt = function | Int i -> i | _ -> failwith "unexpected Data type"
+    let asString = function | String i -> i | _ -> failwith "unexpected Data type"
+    let asList = function | List list -> list | _ -> failwith "unexpected Data type"
 
-type ApartmentInfo = {
-    Name: string
-    Address: string
-    YearBuilt: string option
-}
-
-let parseApartmentListing (doc: HtmlNode) =
-    doc
-    |> tryPath "//div[@class='placardContainer']//article//section/a[1]" 
-    |> List.map (attr "href")
-    |> List.map (fun (s: string) -> s.Replace("http://www.apartments.com/", ""))
-
-let parseApartmentPage (doc: HtmlNode) =
-    {
-        Name = doc |> tryPaths ["//div[@class='propertyName']/span"; "//div[@class='propertyName']"] |> List.head |> innerText
-        Address = doc |> tryPaths ["//div[@class='propertyAddress']/span"] |> List.map innerText |> String.concat " "
-        YearBuilt = doc |> tryPaths ["//div[@class='specList propertyFeatures']//li"] |> List.map innerText |> List.tryFind (fun (x: string) -> x.StartsWith("Built"))
+[<AutoOpen>]
+module Config = 
+    type StepConfig<'TInput, 'TParseResult, 'TOutput> = {
+        RequestCreator: 'TInput -> Request
+        Parser: HtmlNode -> 'TParseResult
+        Reduce: 'TParseResult list -> 'TOutput
     }
 
-let createApartmentListingRequest baseUrl city fragment =
-    createRequest Get (sprintf "%s/%s/%s" baseUrl city fragment)
+    type JobConfig = {
+        InitialInput: Data list
+        Steps: StepConfig<Data, Data, Data> list
+    }
 
-let createApartmentRecordRequest baseUrl fragment =
-    createRequest Get (sprintf "%s/%s" baseUrl fragment)
+[<AutoOpen>]
+module Results = 
+    type SuccessFail<'a> =
+        | Success of 'a
+        | Fail of exn list
 
-type SuccessFail<'a> =
-    | Success of 'a
-    | Fail of exn list
+    type ParseStatus<'a> = 
+        | ParseFail of exn list
+        | ParseSuccess of 'a
 
-type ParseStatus<'a> = 
-    | ParseFail of exn list
-    | ParseSuccess of 'a
+    type ScrapeResult<'a> =
+        | FetchFail of exn list
+        | FetchSuccess of string * ParseStatus<'a>
 
-type ScrapeResult<'a> =
-    | FetchFail of exn list
-    | FetchSuccess of string * ParseStatus<'a>
+    type RunRowStatus<'a> =
+        | NotStarted
+        | Waiting
+        | Done of ScrapeResult<'a>
 
-type RunRowStatus<'a> =
-    | NotStarted
-    | Waiting
-    | Done of ScrapeResult<'a>
+    type StepRow<'TInput, 'TParseResult> = { Fragment: 'TInput; Status: RunRowStatus<'TParseResult> }
+    type RunningStepState<'TInput, 'TParseResult, 'TOutput> = { Results: StepRow<'TInput, 'TParseResult> list; OverallResult: 'TOutput option }
 
-type RunRow<'a> = { Fragment: string; Status: RunRowStatus<'a> }
-type RunState<'a, 'b> = { Results: RunRow<'a> list; OverallResult: 'b option }
+    type StepState =
+        | WaitingForInput
+        | Running of RunningStepState<Data, Data, Data>
 
-let repeatOnFailure maxTries a =
-    let rec inner n acc =
+    type JobState = {
+        Steps: StepState array
+    }
+
+[<AutoOpen>]
+module Helpers = 
+    let repeatOnFailure maxTries a =
+        let rec inner n acc =
+            async {
+                if n < maxTries then
+                    let! result = a
+                    match result with 
+                    | Success _ ->
+                        return result
+                    | Fail exns ->
+                        return! inner (n+1) (exns::acc)
+                else 
+                    return Fail (acc |> List.rev |> List.collect id)
+            }
+        inner 0 []
+
+    let wrapInTryCatch (f: 'a -> 'b) =
+        fun x ->
+            try
+                f x |> Success
+            with
+            | exn -> Fail [ exn ]
+
+let doJobStep (config: StepConfig<'TInput, 'TParseResult, 'TOutput>) (fragments: 'TInput list) =
+    let fetchHtmlForFragment requestCreator fragment =
         async {
-            if n < maxTries then
-                let! result = a
-                match result with 
-                | Success _ ->
-                    return result
-                | Fail exns ->
-                    return! inner (n+1) (exns::acc)
-            else 
-                return Fail (acc |> List.rev |> List.collect id)
+            try
+                let! html = 
+                    fragment
+                    |> requestCreator
+                    |> getResponseBodyAsync
+
+                return Success html
+            with
+            | ex -> 
+                return Fail [ ex ]
         }
-    inner 0 []
 
-let wrapInTryCatch (f: 'a -> 'b) =
-    fun x ->
-        try
-            f x |> Success
-        with
-        | exn -> Fail [ exn ]
-
-let baseUrl = "http://www.apartments.com/"
-
-let fetchHtmlForFragment (requestCreator: string -> Request) fragment =
-    async {
-        try
-            let! html = 
-                fragment
-                |> requestCreator
-                |> getResponseBodyAsync
-
-            return Success html
-        with
-        | ex -> 
-            return Fail [ ex ]
-    }
-
-let doRun (requestCreator: string -> Request) (parser: HtmlNode -> 'a) (reduce: 'a list -> 'b) (fragments: string list) =
     let rec inner runState =
         asyncSeq {
             let nextRowIdx = runState.Results |> List.tryFindIndex (fun x -> x.Status = NotStarted)
@@ -112,12 +110,12 @@ let doRun (requestCreator: string -> Request) (parser: HtmlNode -> 'a) (reduce: 
 
                 yield { runState with Results = runState.Results |> List.replaceAt idx { nextRow with Status = Waiting } }
 
-                let! fetchResult = fetchHtmlForFragment requestCreator nextRow.Fragment |> repeatOnFailure 3
+                let! fetchResult = fetchHtmlForFragment config.RequestCreator nextRow.Fragment |> repeatOnFailure 3
 
                 let scrapeResult = 
                     match fetchResult with
                     | Success html ->
-                        let parseResult = ((createDoc >> parser) |> wrapInTryCatch) html
+                        let parseResult = ((createDoc >> config.Parser) |> wrapInTryCatch) html
                         
                         let parseResult =
                             match parseResult with
@@ -139,7 +137,7 @@ let doRun (requestCreator: string -> Request) (parser: HtmlNode -> 'a) (reduce: 
                     runState.Results
                     |> List.map (fun r -> r.Status)
                     |> List.choose (function | Done (FetchSuccess(html, ParseSuccess(parsed))) -> Some parsed | _ -> None)
-                    |> reduce
+                    |> config.Reduce
                 yield { runState with OverallResult = Some overallResult }
         }
 
@@ -149,8 +147,31 @@ let doRun (requestCreator: string -> Request) (parser: HtmlNode -> 'a) (reduce: 
         yield! inner initialRunState    
     }
 
-let doListingRun city fragments =
-    doRun (createApartmentListingRequest baseUrl city) parseApartmentListing (List.collect id >> Seq.distinct >> Seq.toList) fragments
+let replace idx newValue array =
+    array
+    |> Array.mapi (fun i x -> if i = idx then newValue else x)
 
-let doRecordRun fragments =
-    doRun (createApartmentRecordRequest baseUrl) parseApartmentPage (id) fragments
+
+let doJob (config: JobConfig) =
+    let rec inner input steps idx (jobState: JobState) =
+        asyncSeq {
+            match steps with
+            | (nextStep::rest) ->
+                let last = ref None
+                for stepState in doJobStep nextStep input do
+                    let jobState = { jobState with Steps = jobState.Steps |> replace idx (Running(stepState)) }
+                    yield jobState
+                    last := Some (stepState, jobState)
+                
+                let stepState, jobState = last.Value.Value
+
+                yield! inner (stepState.OverallResult.Value |> asList) rest (idx+1) jobState
+            | [] ->
+                ()
+        }
+
+    asyncSeq {
+        let initialJobState = { Steps = config.Steps |> List.toArray |> Array.map (fun _ -> WaitingForInput) }
+        yield initialJobState
+        yield! inner config.InitialInput config.Steps 0 initialJobState
+    }
